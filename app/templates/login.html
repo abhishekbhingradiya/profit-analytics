@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block auth_content %}
+<div class="auth-card"><div class="auth-kicker">WELCOME BACK</div><h2>Sign in to<br>your numbers.</h2><p class="auth-lead">Pick up where your team left the story.</p>
+  {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/login" class="form-stack"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Work email<input type="email" name="email" placeholder="you@company.com" required autocomplete="username"></label>
+    <label>Password<input type="password" name="password" placeholder="Your password" required autocomplete="current-password"></label>
+    <button class="button button-primary button-wide" type="submit">Sign in <span>→</span></button>
+  </form><p class="auth-fineprint">A private workspace for decisions that move your margin.</p>
+</div>
+{% endblock %}

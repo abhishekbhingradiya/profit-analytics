@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f1f3ef">
+  <meta name="csrf-token" content="{{ csrf_token(request) }}">
+  <title>{{ title }} · MarginIQ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css?v=1">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js" defer></script>
+  <script src="/static/app.js?v=1" defer></script>
+</head>
+<body class="app-body">
+  {% if user %}
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="/dashboard" aria-label="MarginIQ overview">
+      <span class="brand-mark"><span></span><span></span><span></span></span>
+      <span class="brand-name">margin<span>iq</span></span>
+    </a>
+    <div class="workspace-label">WORKSPACE</div>
+    <div class="workspace-switcher"><span class="workspace-avatar">{{ org.name[:1]|upper }}</span><span class="workspace-copy"><strong>{{ org.name }}</strong><small>Profit intelligence</small></span><span class="chevron">⌄</span></div>
+    <div class="nav-label">ANALYZE</div>
+    <nav class="main-nav" aria-label="Main navigation">
+      {% for key, label, href in nav_items %}
+      {% if key != 'scenarios' or user.role != 'viewer' %}
+      <a class="nav-link {% if active == key %}active{% endif %}" href="{{ href }}">
+        <span class="nav-icon nav-{{ key }}" aria-hidden="true"></span><span>{{ label }}</span>
+        {% if key == 'anomalies' %}<span class="nav-pip"></span>{% endif %}
+      </a>
+      {% endif %}
+      {% endfor %}
+    </nav>
+    <div class="nav-label workspace-nav-label">WORKSPACE</div>
+    <nav class="main-nav" aria-label="Workspace navigation">
+      <a class="nav-link {% if active == 'data' %}active{% endif %}" href="/data"><span class="nav-icon nav-data" aria-hidden="true"></span><span>Data sources</span></a>
+      {% if user.role == 'admin' %}<a class="nav-link {% if active == 'settings' %}active{% endif %}" href="/settings"><span class="nav-icon nav-settings" aria-hidden="true"></span><span>Settings</span></a>{% endif %}
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="security-note"><span class="security-icon">◈</span><span><strong>Private workspace</strong><small>Your data stays yours</small></span></div>
+      <div class="user-menu">
+        <span class="user-avatar">{{ user.full_name[:1]|upper }}</span><span class="user-copy"><strong>{{ user.full_name }}</strong><small>{{ user.role|title }}</small></span>
+        <form action="/logout" method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="icon-button logout-button" title="Sign out" aria-label="Sign out">↗</button></form>
+      </div>
+    </div>
+  </aside>
+  <div class="mobile-overlay" id="mobile-overlay"></div>
+  <main class="main-content">
+    <header class="topbar">
+      <button class="icon-button mobile-menu" id="mobile-menu" aria-label="Open navigation">☰</button>
+      <div class="breadcrumbs"><span>Workspace</span><span class="crumb-sep">/</span><strong>{{ title }}</strong></div>
+      <div class="topbar-right"><span class="period-pill"><span class="live-dot"></span> Data through {{ data_status.last_month or 'no data' }}</span><span class="topbar-divider"></span><span class="currency-label">USD</span></div>
+    </header>
+    <section class="page-wrap">
+      {% if flash %}<div class="flash flash-{{ flash.kind }}" role="status">{{ flash.text }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </section>
+    <footer class="app-footer"><span>MarginIQ <span class="footer-dot">·</span> Profit intelligence</span><span>Numbers should be challenged, not just admired.</span></footer>
+  </main>
+  {% else %}
+  <main class="auth-shell">
+    <a class="brand auth-brand" href="/"><span class="brand-mark"><span></span><span></span><span></span></span><span class="brand-name">margin<span>iq</span></span></a>
+    <div class="auth-layout">
+      <div class="auth-editorial"><div class="eyebrow"><span class="eyebrow-line"></span> PROFIT, MADE LEGIBLE</div><h1>Know where<br>your margin<br><em>goes.</em></h1><p>One clear view of the decisions behind your recurring revenue.</p><div class="auth-stats"><div><strong>One</strong><span>profit model</span></div><div><strong>Every</strong><span>revenue driver</span></div><div><strong>Always</strong><span>in context</span></div></div></div>
+      <div class="auth-form-wrap">{% block auth_content %}{% endblock %}</div>
+    </div>
+    <div class="auth-footer">MarginIQ <span>·</span> A more useful view of profit.</div>
+  </main>
+  {% endif %}
+</body>
+</html>

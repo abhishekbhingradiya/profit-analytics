@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> REVIEW THE EXCEPTIONS</div><h1>Alerts & leakage</h1><p>Outliers and account economics to investigate, not automatic verdicts.</p></div><button class="button button-outline" id="refresh-anomalies"><span class="button-symbol">↻</span> Refresh signals</button></div>
+<div class="alert-summary" id="alert-summary"><span class="alert-count" id="alert-count">—</span><span>signals surfaced from your data</span><span class="alert-summary-divider"></span><span>Ranked by severity and absolute impact</span></div>
+<div class="signal-board" id="anomaly-board"><div class="panel empty-state"><span class="empty-mark">…</span><strong>Finding the outliers</strong><p>Signals will appear here once your metrics are loaded.</p></div></div>
+<div class="panel panel-note"><span class="panel-note-mark">i</span><div><h2>How signals are calculated</h2><p>Monthly metric anomalies use median absolute deviation on month-over-month changes; customer leakage flags negative gross profit or unusually high discount rates. Small samples and accounting changes can create false positives. Amounts are prioritization estimates, not guaranteed savings.</p></div></div>
+{% endblock %}

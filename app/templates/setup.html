@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block auth_content %}
+<div class="auth-card"><div class="auth-kicker">START A WORKSPACE</div><h2>Make profit<br>make sense.</h2><p class="auth-lead">Create your workspace to explore recurring revenue, cost-to-serve and margin drivers.</p>
+  {% if error %}<div class="form-error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/setup" class="form-stack"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <label>Company or workspace name<input name="organization_name" placeholder="Northstar Software" required maxlength="200" autocomplete="organization"></label>
+    <label>Your name<input name="full_name" placeholder="Alex Morgan" required maxlength="200" autocomplete="name"></label>
+    <label>Work email<input type="email" name="email" placeholder="alex@company.com" required maxlength="254" autocomplete="email"></label>
+    <label>Password<input type="password" name="password" placeholder="At least 10 characters" required minlength="10" autocomplete="new-password"></label>
+    <label class="check-row"><input type="checkbox" name="load_sample_data" value="true" checked><span>Load a fictional SaaS dataset to explore the dashboard</span></label>
+    <button class="button button-primary button-wide" type="submit">Create workspace <span>→</span></button>
+  </form><p class="auth-fineprint">You will be the workspace administrator. Sample data can be replaced at any time.</p>
+</div>
+{% endblock %}
