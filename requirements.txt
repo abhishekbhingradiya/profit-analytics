@@ -7,3 +7,5 @@ itsdangerous>=2.2
 pandas>=2.2
 numpy>=2.0
 python-dotenv>=1.0
+cryptography>=42
+requests>=2.32

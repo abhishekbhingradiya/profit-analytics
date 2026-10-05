@@ -12,7 +12,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from app.config import settings
 from app.db import init_db
 from app.config import BASE_DIR
-from app.routers import api, auth, data, pages, settings as settings_router
+from app.routers import api, auth, data, integrations, pages, settings as settings_router
 from app.security import NotAuthenticated
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -86,5 +86,6 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app" / "static")), na
 app.include_router(auth.router)
 app.include_router(pages.router)
 app.include_router(data.router)
+app.include_router(integrations.router)
 app.include_router(settings_router.router)
 app.include_router(api.router)

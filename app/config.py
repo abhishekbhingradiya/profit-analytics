@@ -19,6 +19,7 @@ class Settings:
     secret_key: str
     secure_cookies: bool
     max_upload_mb: int
+    allow_live_stripe: bool
 
     @property
     def is_production(self) -> bool:
@@ -38,6 +39,7 @@ def load_settings() -> Settings:
         env=env,
         database_url=os.getenv("DATABASE_URL") or default_db,
         secret_key=secret,
+        allow_live_stripe=os.getenv("ALLOW_LIVE_STRIPE", "false").lower() == "true",
         secure_cookies=os.getenv("SECURE_COOKIES", "false").lower() == "true",
         max_upload_mb=int(os.getenv("MAX_UPLOAD_MB", "25")),
     )

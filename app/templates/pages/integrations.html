@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> LIVE DATA SOURCES</div><h1>Integrations</h1><p>Bring subscription billing in directly, so revenue reflects reality instead of exports.</p></div><span class="panel-tag">READ-ONLY SYNC</span></div>
+<div class="dashboard-grid data-grid">
+  <section class="panel">
+    <div class="panel-head"><div><h2>Stripe Billing</h2><p>Imports customers and derives monthly recurring revenue from subscriptions.</p></div><span class="panel-tag">{% if connection %}CONNECTED{% else %}NOT CONNECTED{% endif %}</span></div>
+    {% if connection %}
+    <div class="retention-stack">
+      <div class="retention-row"><span>Account</span><strong>{{ connection.account_label or "Stripe" }}</strong></div>
+      <div class="retention-row"><span>Connected</span><strong>{{ connection.created_at.strftime("%Y-%m-%d") }}</strong></div>
+      <div class="retention-row"><span>Last sync</span><strong>{{ connection.last_synced_at.strftime("%Y-%m-%d %H:%M") if connection.last_synced_at else "Never" }}</strong></div>
+    </div>
+    <form method="post" action="/integrations/stripe/sync" onsubmit="return confirm('Sync now? This replaces current customers and revenue with Stripe data. Shared cost pools are kept.')"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="button button-primary button-wide">Sync from Stripe <span>→</span></button></form>
+    <form method="post" action="/integrations/stripe/disconnect" onsubmit="return confirm('Disconnect Stripe? The stored key is removed; imported data stays.')"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="button button-outline button-wide" style="margin-top:7px">Disconnect</button></form>
+    {% else %}
+    <form method="post" action="/integrations/stripe/connect" class="form-stack" style="margin-top:15px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <label>Stripe secret key<input type="password" name="api_key" placeholder="sk_test_..." required autocomplete="off"><small style="font-weight:400;color:#8c978e">{% if allow_live %}Live keys are enabled for this deployment.{% else %}Only test-mode keys are accepted (sk_test_ / rk_test_). Use a restricted, read-only key where possible.{% endif %}</small></label>
+      <button class="button button-primary button-wide">Connect Stripe <span>→</span></button>
+    </form>
+    {% endif %}
+    <p class="fineprint">The key is stored encrypted with this workspace's server secret and is never shown again. Rotating SECRET_KEY requires reconnecting.</p>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h2>Sync history</h2><p>Each run replaces customers and revenue after validation.</p></div></div>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>STARTED</th><th>STATUS</th><th>RESULT</th></tr></thead><tbody>
+      {% for item in runs %}<tr><td>{{ item.run.started_at.strftime("%Y-%m-%d %H:%M") }}</td><td><span class="status-tag {% if item.run.status == 'success' %}status-active{% else %}status-off{% endif %}">{{ item.run.status|title }}</span></td><td>{% if item.stats %}{{ item.stats.customers }} customers · {{ item.stats.revenue_rows }} rows · {{ item.stats.first_month }} → {{ item.stats.last_month }}{% elif item.run.error %}{{ item.run.error[:120] }}{% else %}—{% endif %}</td></tr>
+      {% else %}<tr><td colspan="3" class="empty-table">No syncs yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  <section class="panel panel-note panel-full"><span class="panel-note-mark">i</span><div><h2>How Stripe MRR is derived</h2><p>MRR comes from active subscription prices normalized to monthly amounts (yearly ÷ 12, weekly × 4.345). Coupons reduce net MRR; start and end months are counted in full; trialing and incomplete subscriptions, and usage-based prices, are skipped. These are approximations — reconcile against finance-owned revenue before treating the numbers as decision-grade. Costs are not imported from Stripe: keep using CSV cost uploads, which remain available in the Data workspace.</p></div></section>
+</div>
+{% endblock %}
