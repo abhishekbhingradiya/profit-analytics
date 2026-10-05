@@ -22,10 +22,42 @@
     <p class="fineprint">The key is stored encrypted with this workspace's server secret and is never shown again. Rotating SECRET_KEY requires reconnecting.</p>
   </section>
   <section class="panel">
-    <div class="panel-head"><div><h2>Sync history</h2><p>Each run replaces customers and revenue after validation.</p></div></div>
-    <div class="table-scroll"><table class="data-table"><thead><tr><th>STARTED</th><th>STATUS</th><th>RESULT</th></tr></thead><tbody>
-      {% for item in runs %}<tr><td>{{ item.run.started_at.strftime("%Y-%m-%d %H:%M") }}</td><td><span class="status-tag {% if item.run.status == 'success' %}status-active{% else %}status-off{% endif %}">{{ item.run.status|title }}</span></td><td>{% if item.stats %}{{ item.stats.customers }} customers · {{ item.stats.revenue_rows }} rows · {{ item.stats.first_month }} → {{ item.stats.last_month }}{% elif item.run.error %}{{ item.run.error[:120] }}{% else %}—{% endif %}</td></tr>
-      {% else %}<tr><td colspan="3" class="empty-table">No syncs yet.</td></tr>{% endfor %}
+    <div class="panel-head"><div><h2>QuickBooks Online</h2><p>Imports monthly operating costs from your profit-and-loss report.</p></div><span class="panel-tag">{% if qbo_connection %}CONNECTED{% else %}NOT CONNECTED{% endif %}</span></div>
+    {% if qbo_connection %}
+    <div class="retention-stack">
+      <div class="retention-row"><span>Company</span><strong>{{ qbo_connection.account_label or "QuickBooks" }}</strong></div>
+      <div class="retention-row"><span>Last sync</span><strong>{{ qbo_connection.last_synced_at.strftime("%Y-%m-%d %H:%M") if qbo_connection.last_synced_at else "Never" }}</strong></div>
+    </div>
+    <form method="post" action="/integrations/quickbooks/sync" onsubmit="return confirm('Sync costs now? Shared cost pools in the report window are replaced; revenue and customer-attributed costs are untouched.')"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="button button-primary button-wide">Sync costs from QuickBooks <span>→</span></button></form>
+    <form method="post" action="/integrations/quickbooks/disconnect" onsubmit="return confirm('Disconnect QuickBooks? The stored credentials are removed; imported costs and mappings stay.')"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="button button-outline button-wide" style="margin-top:7px">Disconnect</button></form>
+    <p class="fineprint">Sandbox access tokens expire after about an hour; reconnect with a fresh token before syncing. OAuth refresh is on the roadmap.</p>
+    {% else %}
+    <form method="post" action="/integrations/quickbooks/connect" class="form-stack" style="margin-top:15px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <label>Company (realm) ID<input name="realm_id" placeholder="4620816365..." required autocomplete="off"></label>
+      <label>Access token<input type="password" name="access_token" placeholder="Paste a sandbox access token" required autocomplete="off"><small style="font-weight:400;color:#8c978e">Use a QuickBooks sandbox company and a token from the Intuit developer playground.</small></label>
+      <button class="button button-primary button-wide">Connect QuickBooks <span>→</span></button>
+    </form>
+    <p class="fineprint">Credentials are stored encrypted. Connecting lists your expense accounts for category mapping; nothing is imported until you sync.</p>
+    {% endif %}
+  </section>
+  {% if mappings %}
+  <section class="panel panel-full">
+    <div class="panel-head"><div><h2>GL account mapping</h2><p>Map each QuickBooks expense account to a cost category. Unmapped accounts are excluded from the import.</p></div><span class="panel-tag">{{ mappings|selectattr("category")|list|length }} / {{ mappings|length }} MAPPED</span></div>
+    <form method="post" action="/integrations/quickbooks/mappings">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <div class="table-scroll"><table class="data-table"><thead><tr><th>QUICKBOOKS ACCOUNT</th><th>TYPE</th><th>CATEGORY</th></tr></thead><tbody>
+        {% for mapping in mappings %}<tr><td class="cell-main">{{ mapping.account_name }}</td><td>{{ mapping.account_type or "—" }}</td><td><select name="mapping_{{ mapping.id }}"><option value="">Excluded</option>{% for value, label in categories %}<option value="{{ value }}" {% if mapping.category == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></td></tr>{% endfor %}
+      </tbody></table></div>
+      <button class="button button-primary" style="margin-top:13px">Save mappings</button>
+    </form>
+  </section>
+  {% endif %}
+  <section class="panel">
+    <div class="panel-head"><div><h2>Sync history</h2><p>Each run replaces the matching slice of data after validation.</p></div></div>
+    <div class="table-scroll"><table class="data-table"><thead><tr><th>STARTED</th><th>PROVIDER</th><th>STATUS</th><th>RESULT</th></tr></thead><tbody>
+      {% for item in runs %}<tr><td>{{ item.run.started_at.strftime("%Y-%m-%d %H:%M") }}</td><td>{{ item.run.provider|title }}</td><td><span class="status-tag {% if item.run.status == 'success' %}status-active{% else %}status-off{% endif %}">{{ item.run.status|title }}</span></td><td>{% if item.stats and item.stats.revenue_rows is defined %}{{ item.stats.customers }} customers · {{ item.stats.revenue_rows }} rows · {{ item.stats.first_month }} → {{ item.stats.last_month }}{% elif item.stats and item.stats.cost_rows is defined %}{{ item.stats.cost_rows }} cost rows · {{ item.stats.first_month }} → {{ item.stats.last_month }}{% elif item.run.error %}{{ item.run.error[:120] }}{% else %}—{% endif %}</td></tr>
+      {% else %}<tr><td colspan="4" class="empty-table">No syncs yet.</td></tr>{% endfor %}
     </tbody></table></div>
   </section>
   <section class="panel panel-note panel-full"><span class="panel-note-mark">i</span><div><h2>How Stripe MRR is derived</h2><p>MRR comes from active subscription prices normalized to monthly amounts (yearly ÷ 12, weekly × 4.345). Coupons reduce net MRR; start and end months are counted in full; trialing and incomplete subscriptions, and usage-based prices, are skipped. These are approximations — reconcile against finance-owned revenue before treating the numbers as decision-grade. Costs are not imported from Stripe: keep using CSV cost uploads, which remain available in the Data workspace.</p></div></section>

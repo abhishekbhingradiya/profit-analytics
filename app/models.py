@@ -107,6 +107,21 @@ class SyncRun(Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class AccountMapping(Base):
+    """Maps an external GL account to an internal cost category; unmapped accounts are excluded."""
+
+    __tablename__ = "account_mappings"
+    __table_args__ = (UniqueConstraint("org_id", "provider", "account_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(40))
+    account_id: Mapped[str] = mapped_column(String(64))
+    account_name: Mapped[str] = mapped_column(String(200))
+    account_type: Mapped[str] = mapped_column(String(60), default="")
+    category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
