@@ -28,7 +28,7 @@
     if (key.includes('margin') || key.includes('growth') || key.includes('retention') || key === 'nrr' || key === 'grr' || key === 'discount_rate' || key === 'monthly_logo_churn') return pct(value);
     if (key === 'ltv_to_cac') return value == null ? 'n/a' : `${Number(value).toFixed(1)}×`;
     if (key === 'cac_payback_months') return value == null ? 'n/a' : `${Number(value).toFixed(1)} mo`;
-    if (key === 'active_customers') return value == null ? 'n/a' : Number(value).toLocaleString();
+    if (key === 'active_customers') return value == null ? 'n/a' : Math.round(Number(value)).toLocaleString();
     if (key === 'rule_of_40') return pct(value);
     return value == null ? 'n/a' : String(value);
   };
@@ -52,6 +52,33 @@
     }
     if (node) node.textContent = message;
   };
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const easeOutCubic = (t) => 1 - (1 - t) ** 3;
+  const animateValue = (node, value, formatter, duration = 700) => {
+    if (!node) return;
+    const target = Number(value);
+    if (reducedMotion || document.hidden || value === null || value === undefined || Number.isNaN(target)) {
+      node.textContent = formatter(value);
+      return;
+    }
+    const start = performance.now();
+    const frame = (now) => {
+      if (document.hidden) {
+        node.textContent = formatter(target);
+        return;
+      }
+      const t = Math.min(1, (now - start) / duration);
+      node.textContent = formatter(target * easeOutCubic(t));
+      if (t < 1) requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  };
+  const pulse = (node) => {
+    if (!node || reducedMotion) return;
+    node.classList.remove('pulse-value');
+    void node.offsetWidth;
+    node.classList.add('pulse-value');
+  };
   const initChart = (id, option) => {
     const node = document.getElementById(id);
     if (!node || !window.echarts) return null;
@@ -67,11 +94,13 @@
   const baseAxis = (extra = {}) => ({ axisLine: { lineStyle: { color: '#dce3dc' } }, axisTick: { show: false }, axisLabel: { color: palette.muted, fontSize: 9 }, splitLine: { lineStyle: { color: palette.grid, type: 'dashed' } }, ...extra });
   const baseTooltip = { trigger: 'axis', backgroundColor: '#17352b', borderWidth: 0, textStyle: { color: '#f4f6ef', fontSize: 10 }, axisPointer: { type: 'line', lineStyle: { color: '#9cac91', type: 'dashed' } } };
   const legend = (data, top = 0) => ({ top, right: 3, itemWidth: 8, itemHeight: 8, icon: 'circle', textStyle: { color: palette.muted, fontSize: 9 }, data });
-  const noAnimation = { animationDuration: 420, animationEasing: 'cubicOut' };
+  const motion = reducedMotion
+    ? { animation: false }
+    : { animationDuration: 900, animationEasing: 'cubicOut', animationDelay: (i) => Math.min(i * 16, 420), animationDurationUpdate: 450 };
   const paintKpis = (data) => {
     $$('[data-kpi]').forEach((node) => {
       const key = node.dataset.kpi;
-      node.textContent = formatKpi(key, data[key]);
+      animateValue(node, data[key], (v) => formatKpi(key, v));
       if (key === 'mom_growth') node.classList.toggle('negative', (data[key] ?? 0) < 0);
     });
   };
@@ -83,7 +112,7 @@
   const paintPnl = (rows, id = 'dashboard-pnl') => {
     const labels = rows.map((r) => dateLabel(r.month));
     initChart(id, {
-      ...noAnimation, color: [palette.green, palette.lime, palette.coral], tooltip: { ...baseTooltip, valueFormatter: money },
+      ...motion, color: [palette.green, palette.lime, palette.coral], tooltip: { ...baseTooltip, valueFormatter: money },
       legend: legend(['Revenue', 'Gross profit', 'Operating income']), grid: { left: 48, right: 18, top: 38, bottom: 27 },
       xAxis: { type: 'category', data: labels, ...baseAxis({ boundaryGap: false, axisLabel: { ...baseAxis().axisLabel, interval: Math.max(0, Math.floor(labels.length / 10)) } }) },
       yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: (v) => money(v) } }) },
@@ -97,7 +126,7 @@
   const paintProfit = (rows, chartId = 'dashboard-profitability', tableId = null) => {
     const names = rows.map((r) => r.group);
     initChart(chartId, {
-      ...noAnimation, color: [palette.green, palette.lime, palette.coral], tooltip: { ...baseTooltip, trigger: 'axis', valueFormatter: (v) => money(v) },
+      ...motion, color: [palette.green, palette.lime, palette.coral], tooltip: { ...baseTooltip, trigger: 'axis', valueFormatter: (v) => money(v) },
       legend: legend(['Revenue', 'Gross profit', 'Gross margin']), grid: { left: 54, right: 46, top: 39, bottom: 32 },
       xAxis: { type: 'category', data: names, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: 0, rotate: names.length > 5 ? 20 : 0 } }) },
       yAxis: [{ type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: (v) => money(v) } }) }, { type: 'value', min: 0, max: 1, ...baseAxis({ splitLine: { show: false }, axisLabel: { ...baseAxis().axisLabel, formatter: (v) => `${(v * 100).toFixed(0)}%` } }) }],
@@ -135,7 +164,7 @@
     const render = async () => {
       try {
         const [result, pnl] = await Promise.all([api(`/api/insights?period_months=${period?.value || 1}`), api('/api/pnl')]);
-        $('#insight-change').textContent = signedMoney(result.gross_profit.change);
+        animateValue($('#insight-change'), result.gross_profit.change, signedMoney);
         $('#insight-change').classList.toggle('negative', result.gross_profit.change < 0);
         $('#insight-period-label').textContent = `${result.current_period} vs ${result.previous_period}`;
         const narrative = $('#insight-narrative');
@@ -146,7 +175,7 @@
         const water = result.waterfall.steps;
         const labels = [result.previous_period, ...water.map((d) => d.label), result.current_period];
         const values = [result.waterfall.start, ...water.map((d) => d.impact), result.waterfall.end];
-        initChart('insights-waterfall', { ...noAnimation, tooltip: { ...baseTooltip, valueFormatter: money }, grid: { left: 54, right: 20, top: 12, bottom: 65 }, xAxis: { type: 'category', data: labels, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: 0, rotate: 20 } }) }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series: [{ type: 'bar', data: values.map((v, i) => ({ value: v, itemStyle: { color: i === 0 || i === values.length - 1 ? palette.green : v >= 0 ? palette.lime : palette.coral } })), barMaxWidth: 32, itemStyle: { borderRadius: [3, 3, 0, 0] } }] });
+        initChart('insights-waterfall', { ...motion, tooltip: { ...baseTooltip, valueFormatter: money }, grid: { left: 54, right: 20, top: 12, bottom: 65 }, xAxis: { type: 'category', data: labels, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: 0, rotate: 20 } }) }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series: [{ type: 'bar', data: values.map((v, i) => ({ value: v, itemStyle: { color: i === 0 || i === values.length - 1 ? palette.green : v >= 0 ? palette.lime : palette.coral } })), barMaxWidth: 32, itemStyle: { borderRadius: [3, 3, 0, 0] } }] });
         paintPnl(pnl, 'insights-trend');
       } catch (error) { notifyError(error.message); }
     };
@@ -159,7 +188,7 @@
       const [bridge, cohorts] = await Promise.all([api('/api/mrr-bridge'), api('/api/retention')]);
       await getKpis();
       const labels = bridge.map((r) => dateLabel(r.month));
-      initChart('revenue-bridge', { ...noAnimation, color: [palette.green, palette.lime, palette.blue, palette.gold, palette.coral], tooltip: { ...baseTooltip, valueFormatter: money }, legend: legend(['New', 'Expansion', 'Reactivation', 'Contraction', 'Churn']), grid: { left: 49, right: 18, top: 38, bottom: 30 }, xAxis: { type: 'category', data: labels, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: Math.max(0, Math.floor(labels.length / 10)) } }) }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series: [
+      initChart('revenue-bridge', { ...motion, color: [palette.green, palette.lime, palette.blue, palette.gold, palette.coral], tooltip: { ...baseTooltip, valueFormatter: money }, legend: legend(['New', 'Expansion', 'Reactivation', 'Contraction', 'Churn']), grid: { left: 49, right: 18, top: 38, bottom: 30 }, xAxis: { type: 'category', data: labels, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: Math.max(0, Math.floor(labels.length / 10)) } }) }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series: [
         { name: 'New', type: 'bar', stack: 'positive', barMaxWidth: 19, data: bridge.map((r) => r.new) },
         { name: 'Expansion', type: 'bar', stack: 'positive', barMaxWidth: 19, data: bridge.map((r) => r.expansion) },
         { name: 'Reactivation', type: 'bar', stack: 'positive', barMaxWidth: 19, data: bridge.map((r) => r.reactivation) },
@@ -195,7 +224,7 @@
         table.innerHTML = rows.map((r) => `<tr><td class="cell-main">${escapeHtml(r.group)}</td><td>${r.active_customers}</td><td>${r.new_customers}</td><td>${pct(r.monthly_logo_churn)}</td><td>${pct(r.gross_margin)}</td><td>${money(r.cac)}</td><td>${money(r.ltv)}</td><td>${r.ltv_to_cac == null ? 'n/a' : `${r.ltv_to_cac.toFixed(1)}×`}</td><td>${r.cac_payback_months == null ? 'n/a' : `${r.cac_payback_months.toFixed(1)} mo`}</td></tr>`).join('') || '<tr><td colspan="9" class="empty-table">No unit-economics data is available.</td></tr>';
         if (!dimension.value && rows[0]) {
           const data = { ltv_to_cac: rows[0].ltv_to_cac, cac_payback_months: rows[0].cac_payback_months, cac: rows[0].cac, ltv: rows[0].ltv };
-          $$('[data-kpi]').forEach((node) => { node.textContent = formatKpi(node.dataset.kpi, data[node.dataset.kpi]); });
+          $$('[data-kpi]').forEach((node) => { animateValue(node, data[node.dataset.kpi], (v) => formatKpi(node.dataset.kpi, v)); });
         } else if (dimension.value) await getKpis();
       } catch (error) { notifyError(error.message); }
     };
@@ -208,10 +237,10 @@
     const render = async () => {
       try {
         const result = await api(`/api/forecast?horizon=${horizon.value}`);
-        $('#forecast-revenue').textContent = money(result.summary.revenue);
-        $('#forecast-gp').textContent = money(result.summary.gross_profit);
-        $('#forecast-oi').textContent = money(result.summary.operating_income);
-        $('#forecast-arr').textContent = money(result.summary.exit_arr);
+        animateValue($('#forecast-revenue'), result.summary.revenue, money);
+        animateValue($('#forecast-gp'), result.summary.gross_profit, money);
+        animateValue($('#forecast-oi'), result.summary.operating_income, money);
+        animateValue($('#forecast-arr'), result.summary.exit_arr, money);
         const accuracy = result.summary.backtest_mape_3m;
         $('#forecast-accuracy').textContent = accuracy == null ? 'Backtest accuracy is unavailable until there are at least 12 months of data.' : `Three-month holdout revenue MAPE: ${pct(accuracy)}. This compares historical forecast errors; it is not a guarantee of future accuracy.`;
         $('#forecast-method').textContent = result.method + '. COGS and OpEx are forecast separately; no pipeline, seasonality or causal events are modeled.';
@@ -222,7 +251,7 @@
         const prediction = [...Array(Math.max(0, history.length - 1)).fill(null), history.at(-1)?.revenue ?? null, ...future.map((r) => r.revenue)];
         const lower = [...Array(history.length).fill(null), ...future.map((r) => r.revenue_lower)];
         const band = [...Array(history.length).fill(null), ...future.map((r) => Math.max(0, r.revenue_upper - r.revenue_lower))];
-        initChart('forecast-chart', { ...noAnimation, color: [palette.green, palette.gold], tooltip: { ...baseTooltip, valueFormatter: money }, legend: legend(['Actual revenue', 'Forecast']), grid: { left: 52, right: 18, top: 39, bottom: 29 }, xAxis: { type: 'category', data: allLabels, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: Math.max(0, Math.floor(allLabels.length / 11)) } }) }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series: [
+        initChart('forecast-chart', { ...motion, color: [palette.green, palette.gold], tooltip: { ...baseTooltip, valueFormatter: money }, legend: legend(['Actual revenue', 'Forecast']), grid: { left: 52, right: 18, top: 39, bottom: 29 }, xAxis: { type: 'category', data: allLabels, ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, interval: Math.max(0, Math.floor(allLabels.length / 11)) } }) }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series: [
           { name: 'Prediction interval', type: 'line', stack: 'range', data: lower, showSymbol: false, lineStyle: { opacity: 0 }, areaStyle: { opacity: 0 } },
           { name: '95% range', type: 'line', stack: 'range', data: band, showSymbol: false, lineStyle: { opacity: 0 }, areaStyle: { color: '#d5e3c7', opacity: .42 }, tooltip: { show: false } },
           { name: 'Actual revenue', type: 'line', data: actual, showSymbol: false, smooth: .2, lineStyle: { width: 2.3 } },
@@ -246,9 +275,11 @@
       try {
         const result = await api('/api/scenarios', { method: 'POST', body: JSON.stringify({ ...inputs(), months: 12 }) });
         const base = result.totals.baseline; const scen = result.totals.scenario; const delta = result.totals.delta;
-        $('#scenario-delta-oi').textContent = signedMoney(delta.operating_income);
+        animateValue($('#scenario-delta-oi'), delta.operating_income, signedMoney);
+        pulse($('#scenario-delta-oi'));
         $('#scenario-delta-oi').classList.toggle('negative', delta.operating_income < 0);
-        $('#scenario-delta-gm').textContent = delta.gross_margin == null ? 'n/a' : `${delta.gross_margin >= 0 ? '+' : ''}${(delta.gross_margin * 100).toFixed(1)} pp`;
+        animateValue($('#scenario-delta-gm'), delta.gross_margin, (v) => v == null ? 'n/a' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)} pp`);
+        pulse($('#scenario-delta-gm'));
         const baselineRows = result.baseline;
         const scenarioRows = result.scenario;
         const series = [
@@ -257,7 +288,7 @@
           { name: 'Baseline operating income', type: 'line', data: baselineRows.map((row) => row.operating_income), smooth: .2, showSymbol: false, lineStyle: { type: 'dashed', opacity: .65 } },
           { name: 'Scenario operating income', type: 'line', data: scenarioRows.map((row) => row.operating_income), smooth: .2, showSymbol: false, lineStyle: { width: 2.1 } },
         ];
-        initChart('scenario-chart', { ...noAnimation, color: [palette.muted, palette.green, '#dc9b80', palette.coral], tooltip: { ...baseTooltip, valueFormatter: money }, legend: legend(series.map((s) => s.name)), grid: { left: 54, right: 15, top: 52, bottom: 29 }, xAxis: { type: 'category', data: scenarioRows.map((row) => dateLabel(row.month)), ...baseAxis() }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series });
+        initChart('scenario-chart', { ...motion, color: [palette.muted, palette.green, '#dc9b80', palette.coral], tooltip: { ...baseTooltip, valueFormatter: money }, legend: legend(series.map((s) => s.name)), grid: { left: 54, right: 15, top: 52, bottom: 29 }, xAxis: { type: 'category', data: scenarioRows.map((row) => dateLabel(row.month)), ...baseAxis() }, yAxis: { type: 'value', ...baseAxis({ axisLabel: { ...baseAxis().axisLabel, formatter: money } }) }, series });
         const metrics = [['Revenue', 'revenue'], ['Gross profit', 'gross_profit'], ['Operating income', 'operating_income'], ['Gross margin', 'gross_margin'], ['Operating margin', 'operating_margin'], ['Exit ARR', 'exit_arr']];
         $('#scenario-comparison').innerHTML = `<div class="compare-head">Metric</div><div class="compare-head">Baseline</div><div class="compare-head">Scenario</div><div class="compare-head">Change</div>${metrics.map(([label, key]) => { const fmt = key.includes('margin') ? pct : money; return `<div class="compare-label">${label}</div><div class="compare-num">${fmt(base[key])}</div><div class="compare-num">${fmt(scen[key])}</div><div class="compare-num ${delta[key] < 0 ? 'negative' : 'positive'}">${key.includes('margin') ? `${delta[key] >= 0 ? '+' : ''}${(delta[key] * 100).toFixed(1)} pp` : signedMoney(delta[key])}</div>`; }).join('')}`;
       } catch (error) { notifyError(error.message); }
@@ -271,7 +302,7 @@
     const load = async () => {
       try {
         const rows = await api('/api/anomalies');
-        $('#alert-count').textContent = rows.length;
+        animateValue($('#alert-count'), rows.length, (v) => String(Math.round(v)), 500);
         const board = $('#anomaly-board');
         if (!rows.length) { board.innerHTML = '<div class="panel empty-state"><span class="empty-mark">✓</span><strong>No material signals found</strong><p>Keep an eye on upcoming periods as they are added.</p></div>'; return; }
         board.innerHTML = rows.map((r) => `<article class="alert-card"><span class="alert-stripe ${r.severity}"></span><div><div class="alert-title-line"><strong>${escapeHtml(r.title)}</strong><span class="severity severity-${r.severity}">${escapeHtml(r.severity)}</span></div><p>${escapeHtml(r.message)}</p></div><div class="alert-impact">${signedMoney(r.impact || 0)}</div></article>`).join('');
