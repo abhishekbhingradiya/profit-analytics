@@ -29,17 +29,12 @@ def create_user(
     if db.scalar(select(User.id).where(User.email == email)):
         flash(request, "error", "That email already has an account.")
         return RedirectResponse("/settings", status_code=303)
-    user = User(
-        org_id=actor.org_id,
-        full_name=full_name[:200],
-        email=email[:254],
-        role=role,
-        password_hash=hash_password(password),
-    )
+    user = User(vendor_id=actor.vendor_id, full_name=full_name[:200], email=email[:254],
+                role=role, password_hash=hash_password(password))
     db.add(user)
     record(db, actor, "user_created", f"email={email}; role={role}")
     db.commit()
-    flash(request, "success", f"Added {email} to the workspace.")
+    flash(request, "success", f"Added {email} to the account.")
     return RedirectResponse("/settings", status_code=303)
 
 
@@ -51,7 +46,7 @@ def set_user_status(
     db: Session = Depends(get_db),
     actor: User = Depends(require_role("admin")),
 ):
-    target = db.scalar(select(User).where(User.id == user_id, User.org_id == actor.org_id))
+    target = db.scalar(select(User).where(User.id == user_id, User.vendor_id == actor.vendor_id))
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
     if target.id == actor.id and not active:

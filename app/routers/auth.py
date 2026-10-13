@@ -3,9 +3,8 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.config import settings
 from app.db import get_db
-from app.models import Organization, User
+from app.models import User, Vendor
 from app.security import (
     DUMMY_HASH,
     LoginThrottle,
@@ -17,7 +16,8 @@ from app.security import (
 )
 from app.services.audit import record
 from app.services.demo_data import load_demo
-from app.templating import flash, render
+from app.tenancy import provision_tenant_dsn, tenant_session
+from app.templating import render
 
 router = APIRouter()
 login_throttle = LoginThrottle()
@@ -36,13 +36,13 @@ def root(request: Request, db: Session = Depends(get_db)):
 def setup_page(request: Request, db: Session = Depends(get_db)):
     if db.scalar(select(User.id).limit(1)) is not None:
         return RedirectResponse("/login", status_code=303)
-    return render(request, "setup.html", title="Create your workspace", error=None)
+    return render(request, "setup.html", title="Create your vendor account", error=None)
 
 
 @router.post("/setup", dependencies=[Depends(verify_csrf)])
 def setup(
     request: Request,
-    organization_name: str = Form(...),
+    vendor_name: str = Form(...),
     full_name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
@@ -51,32 +51,28 @@ def setup(
 ):
     if db.scalar(select(User.id).limit(1)) is not None:
         return RedirectResponse("/login", status_code=303)
-    organization_name, full_name, email = organization_name.strip(), full_name.strip(), email.strip().lower()
-    if not organization_name or not full_name or "@" not in email:
-        return render(request, "setup.html", title="Create your workspace", error="Enter a valid workspace, name and email.", status_code=422)
+    vendor_name, full_name, email = vendor_name.strip(), full_name.strip(), email.strip().lower()
+    if not vendor_name or not full_name or "@" not in email:
+        return render(request, "setup.html", title="Create your vendor account",
+                      error="Enter a valid business name, your name and a work email.", status_code=422)
     if len(password) < MIN_PASSWORD_LENGTH:
-        return render(
-            request,
-            "setup.html",
-            title="Create your workspace",
-            error=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
-            status_code=422,
-        )
-    org = Organization(name=organization_name[:200], currency="USD")
-    db.add(org)
+        return render(request, "setup.html", title="Create your vendor account",
+                      error=f"Password must be at least {MIN_PASSWORD_LENGTH} characters.", status_code=422)
+    vendor = Vendor(name=vendor_name[:200])
+    db.add(vendor)
     db.flush()
-    user = User(
-        org_id=org.id,
-        email=email[:254],
-        full_name=full_name[:200],
-        password_hash=hash_password(password),
-        role="admin",
-    )
+    provision_tenant_dsn(vendor)
+    user = User(vendor_id=vendor.id, email=email[:254], full_name=full_name[:200],
+                password_hash=hash_password(password), role="admin")
     db.add(user)
     db.flush()
-    if load_sample_data:
-        load_demo(db, org)
-    record(db, user, "workspace_created", f"sample_data={bool(load_sample_data)}")
+    tenant_db = tenant_session(vendor)
+    try:
+        if load_sample_data:
+            load_demo(tenant_db)
+    finally:
+        tenant_db.close()
+    record(db, user, "vendor_created", f"sample_data={bool(load_sample_data)}")
     db.commit()
     start_session(request, user)
     return RedirectResponse("/dashboard", status_code=303)
@@ -98,13 +94,8 @@ def login(
     ip = request.client.host if request.client else "unknown"
     key = f"{ip}:{email}"
     if login_throttle.is_blocked(key):
-        return render(
-            request,
-            "login.html",
-            title="Sign in",
-            error="Too many attempts. Please wait 15 minutes before trying again.",
-            status_code=429,
-        )
+        return render(request, "login.html", title="Sign in",
+                      error="Too many attempts. Please wait 15 minutes before trying again.", status_code=429)
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     encoded = user.password_hash if user else DUMMY_HASH
     valid = verify_password(password, encoded)

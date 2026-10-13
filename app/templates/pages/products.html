@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> CATALOG & ENTRY</div><h1>Products</h1><p>Add products with your own product IDs, record sales, and expand any product to see its buyers.</p></div><span class="panel-tag">{{ stats.products }} PRODUCTS · {{ stats.sales }} SALES</span></div>
+<div class="dashboard-grid data-grid">
+  <section class="panel"><div class="panel-head"><div><h2>Add a product</h2><p>Product ID is yours to choose and must be unique.</p></div></div>
+    <form method="post" action="/products" class="form-stack" style="margin-top:14px"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <label>Product ID<input name="product_code" placeholder="SKU-2001" required maxlength="64"></label>
+      <label>Name<input name="name" placeholder="Hydraulic Pump v3" required maxlength="200"></label>
+      <label>Category<input name="category" placeholder="Hardware (optional)" maxlength="80"></label>
+      <label>Unit price (USD)<input name="unit_price" type="number" step="0.01" min="0" required placeholder="1250.00"></label>
+      <button class="button button-primary button-wide">Add product <span>→</span></button>
+    </form>
+  </section>
+  <section class="panel"><div class="panel-head"><div><h2>Record a sale</h2><p>New customer names are added automatically.</p></div></div>
+    <form method="post" action="/sales" class="form-stack compact-form" style="margin-top:14px"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+      <label>Product<select name="product_id" id="sale-product" required><option value="">Loading products…</option></select></label>
+      <label>Customer name<input name="customer_name" placeholder="Asha K." required maxlength="200"></label>
+      <label>Customer email<input name="customer_email" type="email" placeholder="optional" maxlength="254"></label>
+      <label>Company<input name="customer_company" placeholder="optional" maxlength="200"></label>
+      <div class="field-row"><label>Quantity<input name="quantity" type="number" min="1" value="1" required></label><label>Unit price<input name="unit_price" type="number" step="0.01" min="0" placeholder="product price"></label></div>
+      <div class="field-row"><label>Sale date<input name="sale_date" type="date"></label><label>Payment due<input name="due_date" type="date"></label></div>
+      <label>Amount already paid (USD)<input name="amount_paid" type="number" step="0.01" min="0" value="0"></label>
+      <button class="button button-primary button-wide">Record sale <span>→</span></button>
+    </form>
+  </section>
+  <section class="panel panel-full"><div class="panel-head"><div><h2>All products</h2><p>Highest sellers first. Click a product to list every customer who bought it.</p></div><label class="select-wrap search-wrap"><span>Search</span><input id="product-search" type="search" placeholder="Search by ID, name or category…" maxlength="120"></label></div>
+    <div class="table-scroll"><table class="data-table" id="product-table"><thead><tr><th></th><th>PRODUCT</th><th>ID</th><th>CATEGORY</th><th>REVENUE</th><th>UNITS</th><th>ORDERS</th><th>BUYERS</th><th>RECEIVED</th><th>OUTSTANDING</th><th>LAST SOLD</th></tr></thead><tbody></tbody></table></div>
+  </section>
+</div>
+{% endblock %}

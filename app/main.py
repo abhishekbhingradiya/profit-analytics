@@ -9,11 +9,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app.config import settings
+from app.config import BASE_DIR, settings
 from app.db import init_db
-from app.config import BASE_DIR
-from app.routers import api, auth, data, integrations, pages, settings as settings_router
+from app.routers import api, auth, pages, products, settings as settings_router
 from app.security import NotAuthenticated
+from app.tenancy import dispose_engines
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -22,12 +22,13 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 async def lifespan(_app: FastAPI):
     init_db()
     yield
+    dispose_engines()
 
 
 app = FastAPI(
-    title="MarginIQ | Profit intelligence",
-    description="Multi-tenant SaaS profit analytics and decision support.",
-    version="0.1.0",
+    title="VendorLens | Product & customer analytics",
+    description="Multi-tenant sales analytics for vendors: products, customers, billing and forecasts.",
+    version="0.2.0",
     docs_url=None if settings.is_production else "/docs",
     redoc_url=None,
     lifespan=lifespan,
@@ -35,7 +36,7 @@ app = FastAPI(
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.secret_key,
-    session_cookie="margin_session",
+    session_cookie="vendorlens_session",
     max_age=60 * 60 * 8,
     same_site="lax",
     https_only=settings.secure_cookies,
@@ -85,7 +86,6 @@ def health():
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "app" / "static")), name="static")
 app.include_router(auth.router)
 app.include_router(pages.router)
-app.include_router(data.router)
-app.include_router(integrations.router)
+app.include_router(products.router)
 app.include_router(settings_router.router)
 app.include_router(api.router)

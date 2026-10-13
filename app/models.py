@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -10,12 +10,16 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class Organization(Base):
-    __tablename__ = "organizations"
+class Vendor(Base):
+    """A tenant. Its sales data lives in a dedicated database referenced by the encrypted DSN."""
+
+    __tablename__ = "vendors"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
     currency: Mapped[str] = mapped_column(String(3), default="USD")
+    db_dsn_encrypted: Mapped[str] = mapped_column(Text, default="")
+    last_notified_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -23,7 +27,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"), index=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     full_name: Mapped[str] = mapped_column(String(200))
     password_hash: Mapped[str] = mapped_column(String(255))
@@ -31,102 +35,14 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    organization: Mapped[Organization] = relationship()
-
-
-class Customer(Base):
-    __tablename__ = "customers"
-    __table_args__ = (UniqueConstraint("org_id", "external_id"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
-    external_id: Mapped[str] = mapped_column(String(64))
-    name: Mapped[str] = mapped_column(String(200))
-    segment: Mapped[str] = mapped_column(String(60))
-    region: Mapped[str] = mapped_column(String(60))
-    industry: Mapped[str] = mapped_column(String(60), default="Unknown")
-    channel: Mapped[str] = mapped_column(String(60), default="Unknown")
-    signup_month: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-
-class RevenueEntry(Base):
-    """Monthly recurring revenue per customer (one row per customer-month)."""
-
-    __tablename__ = "revenue_monthly"
-    __table_args__ = (Index("ix_revenue_org_month", "org_id", "month"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
-    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
-    month: Mapped[date] = mapped_column(Date)
-    plan: Mapped[str] = mapped_column(String(60), default="Default")
-    list_mrr: Mapped[float] = mapped_column(Float)
-    mrr: Mapped[float] = mapped_column(Float)
-
-
-class CostEntry(Base):
-    """Monthly cost by category; customer_id is set for directly attributable costs."""
-
-    __tablename__ = "costs_monthly"
-    __table_args__ = (Index("ix_costs_org_month", "org_id", "month"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
-    month: Mapped[date] = mapped_column(Date)
-    category: Mapped[str] = mapped_column(String(40))
-    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
-    amount: Mapped[float] = mapped_column(Float)
-
-
-class Connection(Base):
-    """A configured external data source; secrets are stored encrypted."""
-
-    __tablename__ = "connections"
-    __table_args__ = (UniqueConstraint("org_id", "provider"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
-    provider: Mapped[str] = mapped_column(String(40))
-    account_label: Mapped[str] = mapped_column(String(200), default="")
-    encrypted_secret: Mapped[str] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class SyncRun(Base):
-    __tablename__ = "sync_runs"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
-    connection_id: Mapped[int] = mapped_column(ForeignKey("connections.id", ondelete="CASCADE"), index=True)
-    provider: Mapped[str] = mapped_column(String(40))
-    status: Mapped[str] = mapped_column(String(20), default="running")
-    stats: Mapped[str] = mapped_column(Text, default="")
-    error: Mapped[str] = mapped_column(Text, default="")
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class AccountMapping(Base):
-    """Maps an external GL account to an internal cost category; unmapped accounts are excluded."""
-
-    __tablename__ = "account_mappings"
-    __table_args__ = (UniqueConstraint("org_id", "provider", "account_id"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
-    provider: Mapped[str] = mapped_column(String(40))
-    account_id: Mapped[str] = mapped_column(String(64))
-    account_name: Mapped[str] = mapped_column(String(200))
-    account_type: Mapped[str] = mapped_column(String(60), default="")
-    category: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    vendor: Mapped[Vendor] = relationship()
 
 
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id"), index=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     action: Mapped[str] = mapped_column(String(60))
     detail: Mapped[str] = mapped_column(Text, default="")

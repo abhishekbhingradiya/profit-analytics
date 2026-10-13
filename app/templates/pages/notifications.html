@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> DAILY PAYMENT WATCH</div><h1>Notifications</h1><p>Generated once a day: completed payments, deadlines coming up, and deadlines crossed.</p></div>
+  <form method="post" action="/notifications/read"><input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}"><button class="button button-outline"><span class="button-symbol">✓</span> Mark all read</button></form></div>
+<div class="signal-board">
+  {% for note in notifications %}
+  <article class="alert-card {% if not note.is_read %}alert-unread{% endif %}"><span class="alert-stripe {% if note.kind == 'deadline_crossed' %}high{% endif %}"></span>
+    <div><div class="alert-title-line"><strong>{% if note.kind == 'payment_completed' %}Payment completed{% elif note.kind == 'deadline_soon' %}Deadline approaching{% else %}Deadline crossed{% endif %}</strong>
+      <span class="severity {% if note.kind == 'deadline_crossed' %}severity-high{% elif note.kind == 'deadline_soon' %}severity-medium{% else %}severity-low{% endif %}">{{ note.created_on }}</span>
+      {% if not note.is_read %}<span class="severity severity-medium">NEW</span>{% endif %}</div>
+      <p>{{ note.message }}</p></div>
+  </article>
+  {% else %}
+  <div class="panel empty-state"><span class="empty-mark">✓</span><strong>Nothing to report</strong><p>Daily payment notifications will appear here.</p></div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow"><span class="eyebrow-line"></span> WHO BUYS FROM YOU</div><h1>Customers</h1><p>Lifetime value per buyer, best to lowest, with what each still owes.</p></div><span class="panel-tag">{{ stats.customers }} CUSTOMERS</span></div>
+<div class="kpi-grid compact-kpis"><div class="kpi-card"><div class="kpi-label">HIGHEST BUYER</div><div class="kpi-value kpi-name" id="top-buyer">—</div><div class="kpi-foot" id="top-buyer-value">by lifetime purchases</div></div><div class="kpi-card"><div class="kpi-label">LOWEST BUYER</div><div class="kpi-value kpi-name" id="low-buyer">—</div><div class="kpi-foot" id="low-buyer-value">smallest lifetime value</div></div><div class="kpi-card"><div class="kpi-label">ACTIVE CUSTOMERS</div><div class="kpi-value" data-kpi="customers">—</div><div class="kpi-foot">Have bought at least once</div></div><div class="kpi-card"><div class="kpi-label">AVERAGE ORDER</div><div class="kpi-value" data-kpi="avg_order_value">—</div><div class="kpi-foot">Across all recorded sales</div></div></div>
+<section class="panel panel-full"><div class="panel-head"><div><h2>Customer ranking</h2><p>Sorted by lifetime purchase value</p></div></div>
+  <div class="table-scroll"><table class="data-table" id="customer-table"><thead><tr><th>#</th><th>CUSTOMER</th><th>COMPANY</th><th>REVENUE</th><th>ORDERS</th><th>UNITS</th><th>PRODUCTS</th><th>RECEIVED</th><th>OUTSTANDING</th><th>LAST PURCHASE</th></tr></thead><tbody></tbody></table></div>
+</section>
+{% endblock %}

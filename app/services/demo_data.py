@@ -1,120 +1,78 @@
-"""Deterministic, fictional SaaS dataset for first-run exploration."""
+"""Deterministic fictional product/sales history so a new vendor can explore the app."""
 
-from datetime import date
 import calendar
-import math
 import random
+from datetime import date, timedelta
 
-import numpy as np
-from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.models import CostEntry, Customer, Organization, RevenueEntry
+from app.tenant_models import Customer, Product, Sale
 
-SEGMENTS = ["SMB", "Mid-Market", "Enterprise"]
-REGIONS = ["North America", "Europe", "APAC"]
-INDUSTRIES = ["Software", "Financial Services", "Manufacturing", "Healthcare", "Retail"]
-PLANS = {"Starter": 249, "Growth": 799, "Scale": 2499, "Enterprise": 6999}
+PRODUCTS = [
+    ("SKU-1001", "Aluminium Frame Kit", "Hardware", 480.0),
+    ("SKU-1002", "Hydraulic Pump v2", "Hardware", 1250.0),
+    ("SKU-1003", "Control Panel Pro", "Electronics", 890.0),
+    ("SKU-1004", "Sensor Array Pack", "Electronics", 320.0),
+    ("SKU-1005", "Maintenance Plan", "Services", 150.0),
+    ("SKU-1006", "Installation Service", "Services", 600.0),
+    ("SKU-1007", "Filter Cartridge Set", "Consumables", 75.0),
+    ("SKU-1008", "Premium Lubricant Case", "Consumables", 48.0),
+]
+FIRST_NAMES = ["Asha", "Marco", "Lena", "Ravi", "Sofia", "Daniel", "Mei", "Omar", "Julia", "Tomás", "Nina", "Kwame"]
+COMPANIES = ["Vertex Mfg", "Bluejay Industrial", "Cedar Works", "Northstar Plants", "Atlas Fab", "Meridian Tools",
+             "Orbit Machinery", "Redwood Assembly", "Summit Plants", "Brightline Ops"]
 
 
 def _shift_month(month: date, offset: int) -> date:
     absolute = month.year * 12 + month.month - 1 + offset
-    year, month_index = divmod(absolute, 12)
-    day = min(month.day, calendar.monthrange(year, month_index + 1)[1])
-    return date(year, month_index + 1, day)
+    year, index = divmod(absolute, 12)
+    day = min(month.day, calendar.monthrange(year, index + 1)[1])
+    return date(year, index + 1, day)
 
 
-def load_demo(db: Session, org: Organization, customer_count: int = 140, months: int = 30) -> None:
-    """Replace this organization's data with realistic, synthetic MRR and cost history."""
-    db.execute(delete(CostEntry).where(CostEntry.org_id == org.id))
-    db.execute(delete(RevenueEntry).where(RevenueEntry.org_id == org.id))
-    db.execute(delete(Customer).where(Customer.org_id == org.id))
-    py_rng = random.Random(48291)
-    rng = np.random.default_rng(48291)
-    today = date.today().replace(day=1)
-    if customer_count < 8 or months < 12:
-        raise ValueError("Demo dataset requires at least 8 customers and 12 months")
-    month_dates = [_shift_month(today, i - months + 1) for i in range(months)]
+def load_demo(db: Session, months: int = 18, today: date | None = None) -> dict:
+    rng = random.Random(70406)
+    today = today or date.today()
+    start = _shift_month(today.replace(day=1), -(months - 1))
 
+    products = [Product(product_code=c, name=n, category=cat, unit_price=p) for c, n, cat, p in PRODUCTS]
+    db.add_all(products)
     customers = []
-    revenue_rows = []
-    customer_info = []
-    for i in range(customer_count):
-        start = py_rng.randint(0, min(months - 1, int(months * 0.78)))
-        segment = py_rng.choices(SEGMENTS, weights=[0.55, 0.32, 0.13])[0]
-        plan = py_rng.choices(list(PLANS), weights=[0.38, 0.34, 0.20, 0.08])[0]
-        price = PLANS[plan] * py_rng.uniform(0.8, 1.2)
-        name = f"{py_rng.choice(['Northstar', 'Summit', 'Atlas', 'Bright', 'Cedar', 'Vertex', 'Bluejay', 'Meridian', 'Orbit', 'Redwood'])} {py_rng.choice(['Labs', 'Systems', 'Group', 'Works', 'Partners', 'Digital'])} {i + 1:03d}"
-        customer = Customer(
-            org_id=org.id,
-            external_id=f"CUST-{i + 1:04d}",
-            name=name,
-            segment=segment,
-            region=py_rng.choice(REGIONS),
-            industry=py_rng.choice(INDUSTRIES),
-            channel=py_rng.choices(["Direct", "Partner", "Inbound"], weights=[0.48, 0.27, 0.25], k=1)[0],
-            signup_month=month_dates[start],
-        )
-        customers.append(customer)
-        customer_info.append((start, segment, plan, price))
+    for i in range(24):
+        name = f"{rng.choice(FIRST_NAMES)} {chr(65 + i % 26)}."
+        company = rng.choice(COMPANIES)
+        customers.append(Customer(name=name, email=f"buyer{i + 1}@example.com", company=company))
     db.add_all(customers)
     db.flush()
 
-    active = np.zeros(customer_count, dtype=bool)
-    mrr = np.zeros(customer_count, dtype=float)
-    for month_index, month in enumerate(month_dates):
-        new_ids = []
-        for i, customer in enumerate(customers):
-            start, segment, plan, base_price = customer_info[i]
-            if month_index < start:
+    weights = [rng.uniform(0.4, 2.2) for _ in products]
+    sales = 0
+    for month_index in range(months):
+        month_start = _shift_month(start, month_index)
+        orders = rng.randint(14, 26)
+        for _ in range(orders):
+            product = rng.choices(products, weights=weights)[0]
+            customer = rng.choice(customers)
+            quantity = rng.randint(1, 6)
+            unit_price = round(product.unit_price * rng.uniform(0.92, 1.05), 2)
+            total = round(quantity * unit_price, 2)
+            day = rng.randint(1, calendar.monthrange(month_start.year, month_start.month)[1])
+            sale_date = month_start.replace(day=day)
+            if sale_date > today:
                 continue
-            if month_index == start:
-                active[i], mrr[i] = True, base_price
-                new_ids.append(i)
-                continue
-            if not active[i]:
-                continue
-            churn_rate = {"SMB": 0.023, "Mid-Market": 0.012, "Enterprise": 0.006}[segment]
-            if rng.random() < churn_rate:
-                active[i], mrr[i] = False, 0.0
-                continue
-            monthly_growth = 0.004 + (0.004 if segment == "Enterprise" else 0.0)
-            mrr[i] *= max(0.97, 1 + rng.normal(monthly_growth, 0.025))
-            if rng.random() < 0.025:
-                mrr[i] *= 1.15
-
-        for i, customer in enumerate(customers):
-            if not active[i]:
-                continue
-            list_price = mrr[i] * py_rng.uniform(1.02, 1.13)
-            revenue_rows.append(
-                RevenueEntry(
-                    org_id=org.id,
-                    customer_id=customer.id,
-                    month=month,
-                    plan=customer_info[i][2],
-                    list_mrr=round(list_price, 2),
-                    mrr=round(float(mrr[i]), 2),
-                )
-            )
-
-        active_mrr = float(mrr.sum())
-        if active_mrr <= 0:
-            continue
-        trend = 1 + 0.006 * month_index
-        # Costs include shared pools and a small directly attributable sample.
-        monthly_costs = {
-            "hosting": (0.12 + 0.025 * math.sin(month_index / 4)) * active_mrr,
-            "support": 0.055 * active_mrr,
-            "third_party": 0.035 * active_mrr,
-            "payment_fees": 0.024 * active_mrr,
-            "sales": 0.22 * active_mrr * trend,
-            "marketing": 0.17 * active_mrr * trend,
-            "rnd": 0.19 * active_mrr,
-            "gna": 0.13 * active_mrr,
-        }
-        for category, amount in monthly_costs.items():
-            db.add(CostEntry(org_id=org.id, month=month, category=category, customer_id=None, amount=round(amount, 2)))
-
-    db.add_all(revenue_rows)
-    db.flush()
+            due_date = sale_date + timedelta(days=rng.choice([14, 30, 45]))
+            roll = rng.random()
+            if roll < 0.68:
+                amount_paid, paid_on = total, min(due_date - timedelta(days=rng.randint(0, 10)), today)
+            elif roll < 0.82:
+                amount_paid, paid_on = round(total * rng.uniform(0.25, 0.75), 2), None
+            else:
+                amount_paid, paid_on = 0.0, None
+            db.add(Sale(
+                product_id=product.id, customer_id=customer.id, quantity=quantity, unit_price=unit_price,
+                total_amount=total, sale_date=sale_date, due_date=due_date,
+                amount_paid=amount_paid, paid_on=paid_on,
+            ))
+            sales += 1
+    db.commit()
+    return {"products": len(products), "customers": len(customers), "sales": sales}
